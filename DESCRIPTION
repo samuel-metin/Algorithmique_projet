@@ -1,0 +1,20 @@
+Package: Algo
+Type: Package
+Title: Set Cover Problem Solving Algorithm
+Version: 0.1.0
+Authors@R: c(
+    person("Abdoulaye", email = "dablaye592@gmail.com", role = c("aut", "cre")),
+    person("Samuel", role = "aut"),
+    person("Enguerrand", role = "aut"))
+Description: Implementation of algorithms (naive, greedy, branch & bound) to solve set cover problems for the M2 Data Sciences algorithmics course project.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Imports: Rcpp
+LinkingTo: Rcpp
+Suggests:
+    devtools,
+    testthat (>= 3.0.0),
+    rmarkdown,
+    ggplot2
+RoxygenNote: 7.3.3
