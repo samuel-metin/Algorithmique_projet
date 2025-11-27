@@ -2,14 +2,14 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 branch_bound_SetCover_cpp <- function(Z, R) {
-    .Call('_Algo_branch_bound_SetCover_cpp', PACKAGE = 'Algo', Z, R)
+    .Call(`_Algo_branch_bound_SetCover_cpp`, Z, R)
 }
 
 greedy_SetCover_cpp <- function(Z, R) {
-    .Call('_Algo_greedy_SetCover_cpp', PACKAGE = 'Algo', Z, R)
+    .Call(`_Algo_greedy_SetCover_cpp`, Z, R)
 }
 
 naive_SetCover_cpp <- function(Z, R) {
-    .Call('_Algo_naive_SetCover_cpp', PACKAGE = 'Algo', Z, R)
+    .Call(`_Algo_naive_SetCover_cpp`, Z, R)
 }
 
