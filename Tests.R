@@ -2,12 +2,12 @@
 library(Algo)
 
 one.simu <- function(n, func, R = 0.25, seed = NULL) {
-  
+
   if (!is.null(seed)) set.seed(seed)
-  
+
   # Génération des données (Liste de vecteurs)
   Z <- lapply(seq_len(n), function(i) c(runif(1), runif(1)))
-  
+
   # Mesure du temps selon la fonction demandée
   # On utilise le switch pour diriger vers la bonne version (R ou C++)
   t <- switch(func,
@@ -15,22 +15,22 @@ one.simu <- function(n, func, R = 0.25, seed = NULL) {
               greedy = system.time(greedy_SetCover(Z, R))[["elapsed"]],
               naive  = system.time(naive_SetCover(Z, R))[["elapsed"]],
               branch = system.time(branch_bound_SetCover(Z, R))[["elapsed"]],
-              
+
               # --- Versions C++ (Ajoutées) ---
               # Noms basés sur ton fichier RcppExports.R
               greedy_cpp = system.time(greedy_SetCover_cpp(Z, R))[["elapsed"]],
-              # naive_cpp  = system.time(naive_SetCover_cpp(Z, R))[["elapsed"]],
+              naive_cpp  = system.time(naive_SetCover_cpp(Z, R))[["elapsed"]],
               branch_cpp = system.time(branch_bound_SetCover_cpp(Z, R))[["elapsed"]],
-              
+
               NA # Cas par défaut
   )
   return(t)
 }
 
 # Paramètres de simulation
-# Attention : Naive R est très lent, on garde des N raisonnables. 
+# Attention : Naive R est très lent, on garde des N raisonnables.
 # Pour voir la puissance du C++, on pourrait aller plus haut, mais il faut que R suive pour la comparaison.
-vector_n <- c(5L, 8L, 10L, 11L) 
+vector_n <- c(5L, 8L, 10L, 11L)
 nbRep <- 5L
 
 # Liste complète des 6 algorithmes à tester
@@ -70,5 +70,5 @@ matplot(x, y, type = "b", pch = 19, lty = 1, xaxt = "n",
 axis(1, at = x, labels = x)
 
 # Légende dynamique
-legend("topleft", legend = col_names, 
+legend("topleft", legend = col_names,
        col = 1:length(col_names), pch = 19, lty = 1, cex = 0.8)
