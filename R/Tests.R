@@ -19,7 +19,7 @@ one.simu <- function(n, func, R = 0.25, seed = NULL) {
               # --- Versions C++ (Ajoutées) ---
               # Noms basés sur ton fichier RcppExports.R
               greedy_cpp = system.time(greedy_SetCover_cpp(Z, R))[["elapsed"]],
-              naive_cpp  = system.time(naive_SetCover_cpp(Z, R))[["elapsed"]],
+              # naive_cpp  = system.time(naive_SetCover_cpp(Z, R))[["elapsed"]],
               branch_cpp = system.time(branch_bound_SetCover_cpp(Z, R))[["elapsed"]],
               
               NA # Cas par défaut
