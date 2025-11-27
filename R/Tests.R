@@ -1,15 +1,31 @@
 # tests/test-time.R
 # La taille du rayon impacte fortement les temps d'execution R=0.02 favorise naive
 
-one.simu <- function(n, func = c("greedy","naive","branch"), R = 0.2, seed = NULL) {
-  func <- match.arg(func)
+one.simu <- function(n, func, R = 0.25, seed = NULL) {
+  
   if (!is.null(seed)) set.seed(seed)
+  
+  # Génération des données (Liste de vecteurs)
   Z <- lapply(seq_len(n), function(i) c(runif(1), runif(1)))
+  
+  # Mesure du temps selon la fonction demandée
+  # On utilise try() pour éviter de planter le knit en cas d'erreur ponctuelle
+  # Les fonctions _cpp viennent du package Algo chargé précédemment
+  
   t <- switch(func,
+              # --- Versions R ---
               greedy = system.time(greedy_SetCover(Z, R))[["elapsed"]],
               naive  = system.time(naive_SetCover(Z, R))[["elapsed"]],
-              branch = system.time(branch_bound_SetCover(Z, R))[["elapsed"]])
-  t
+              branch = system.time(branch_bound_SetCover(Z, R))[["elapsed"]],
+              
+              # --- Versions C++ (Ajoutées) ---
+              greedy_cpp = system.time(greedy_SetCover_cpp(Z, R))[["elapsed"]],
+              naive_cpp  = system.time(naive_SetCover_cpp(Z, R))[["elapsed"]],
+              branch_cpp = system.time(branch_bound_SetCover_cpp(Z, R))[["elapsed"]],
+              
+              NA # Cas par défaut
+  )
+  return(t)
 }
 
 vector_n <- c(5L,10L)#10L, 15L, 20L, 25L) # taille des Z
