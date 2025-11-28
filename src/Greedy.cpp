@@ -1,4 +1,8 @@
 // greedy.cpp
+
+// [[Rcpp::plugins(cpp17)]] 
+// [[Rcpp::rng(global)]]
+
 #include <Rcpp.h>
 #include <cmath>
 #include <vector>
