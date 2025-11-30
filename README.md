@@ -29,6 +29,24 @@ if (!requireNamespace("remotes", quietly = TRUE)) {
 
 # Installation du package Algo
 remotes::install_github("samuel-metin/Algorithmique_projet")
+```
 
+## Utilisation Rapide
 
+Voici comment utiliser les fonctions principales du package pour résoudre un problème de couverture.
+
+### Génération de données
+
+Créez un ensemble de points ($Z$) et définissez un rayon de couverture ($R$).
+
+```r
+library(Algo)
+
+set.seed(42)
+n <- 10       # Nombre de points
+R <- 0.3      # Rayon de couverture
+
+# Génération de n points aléatoires (liste de vecteurs)
+Z <- lapply(seq_len(n), function(i) c(runif(1), runif(1)))
+```
 
