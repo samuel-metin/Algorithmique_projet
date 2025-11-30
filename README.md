@@ -79,6 +79,7 @@ Résultat typique : Le passage au C++ offre un gain de performance d'un facteur 
 Pour lancer les tests vous-même :
 
 ```r
+if (!requireNamespace("devtools")) install.packages("devtools")
 devtools::source_url("[https://raw.githubusercontent.com/samuel-metin/Algorithmique_projet/main/Tests.R](https://raw.githubusercontent.com/samuel-metin/Algorithmique_projet/main/Tests.R)")
 ```
 
