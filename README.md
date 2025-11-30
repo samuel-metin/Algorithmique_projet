@@ -50,3 +50,50 @@ R <- 0.3      # Rayon de couverture
 Z <- lapply(seq_len(n), function(i) c(runif(1), runif(1)))
 ```
 
+### Résolution (R vs C++)
+
+Vous avez le choix entre les versions R (prototypes) et C++ (performantes).
+
+```r
+# --- Méthode Gloutonne (Approchée) ---
+# Version R
+sol_greedy_r <- greedy_SetCover(Z, R)
+print(sol_greedy_r) 
+
+# Version C++ (Beaucoup plus rapide)
+sol_greedy_cpp <- greedy_SetCover_cpp(Z, R)
+print(sol_greedy_cpp)
+
+# --- Méthode Branch & Bound (Exacte) ---
+# Version C++ recommandée pour n > 15
+sol_bb_cpp <- branch_bound_SetCover_cpp(Z, R)
+print(sol_bb_cpp)
+```
+
+## Benchmark : R vs C++
+
+Le package inclut un script de test (Tests.R) permettant de comparer les temps d'exécution.
+
+Résultat typique : Le passage au C++ offre un gain de performance d'un facteur 50 à 100 sur les algorithmes combinatoires (Branch & Bound, Naïf).
+
+Pour lancer les tests vous-même :
+
+```r
+devtools::source_url("[https://raw.githubusercontent.com/samuel-metin/Algorithmique_projet/main/Tests.R](https://raw.githubusercontent.com/samuel-metin/Algorithmique_projet/main/Tests.R)")
+```
+
+## Structure du Projet
+
+R/ : Codes sources des fonctions R (Naive.R, Greedy.R, BranchBound.R).
+
+src/ : Codes sources C++ optimisés (Naive.cpp, Greedy.cpp, BranchBound.cpp).
+
+Tests.R : Script de simulation et de comparaison de performance.
+
+## Auteurs
+
+Abdoulaye DIALLO
+
+Samuel METIN
+
+Enguerrand TAQUET
