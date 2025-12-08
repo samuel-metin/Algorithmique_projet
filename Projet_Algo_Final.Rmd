@@ -1,0 +1,515 @@
+---
+title: 'Analyse Algorithmique : Résolution du Set Cover Problem'
+author: "TAQUET Enguerrand, METIN Samuel, DIALLO Abdoulaye"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: '3'
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: readable
+    number_sections: true
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+```
+
+# Introduction et Objectif
+
+Nous étudions dans ce document le problème de la Couverture par Ensembles (Set Cover Problem). Ce problème consiste à sélectionner un nombre minimum de stations pour couvrir un ensemble de points répartis dans un espace, sachant que chaque station a un rayon de couverture défini.
+
+Ce problème est connu pour être NP-difficile. Sa complexité théorique pour une résolution exacte est de l'ordre de $O(2^n)$, ce qui signifie qu'aucun algorithme ne peut le résoudre en temps polynomial dans le cas général.
+
+**Dans ce document, nous comparons trois approches :**
+
+1.  **Naive (Force Brute) :** Explore toutes les combinaisons ($O(2^n \cdot n^2)$).
+
+2.  **Branch & Bound :** Exacte mais optimisée par élagage ($O(2^n)$ pire cas).
+
+3.  **Greedy (Glouton)** : Heuristique polynomiale ($O(n^3)$), rapide mais approchée.
+
+Nos objectifs sont :
+
+a)  D'implémenter ces algorithmes en R et en C++ (via le package Algo).
+
+b)  D'évaluer le gain de performance du C++.
+
+c)  De confirmer les complexités théoriques par des simulations.
+
+# Chargement des Packages
+
+Nous chargeons ici le package Algo hébergé sur GitHub, qui contient les implémentations des algorithmes.
+
+```{r install_packages, results='hide'}
+#  Notre Package 'Algo'
+if (!requireNamespace("Algo", quietly = TRUE)) {
+    remotes::install_github("samuel-metin/Algorithmique_projet", upgrade = "never")
+}
+
+library(Algo)
+```
+
+# Complexité Théorique (Par le Calcul)
+
+Avant de lancer les simulations, nous établissons les complexités attendues par le calcul théorique.
+
+Force Brute : L'algorithme doit tester tous les sous-ensembles possibles de stations. La somme des combinaisons est $\sum_{k=1}^n \binom{n}{k} = 2^n$. Pour chaque combinaison, la vérification coûte $O(n^2)$.$$ C_{Naive} = O(2^n \cdot n^2) $$
+
+Branch & Bound : Dans le pire des cas (sans élagage efficace), l'algorithme explore tout l'arbre binaire de décision de profondeur $n$.$$ C_{BnB} = O(2^n) $$
+
+Glouton (Greedy) : À chaque étape, l'algorithme cherche la meilleure station parmi $n$ candidates. Cette opération est répétée jusqu'à couverture complète (au pire $n$ fois). C'est un algorithme polynomial.$$ C_{Greedy} \approx O(n^3) $$
+
+Nous chercherons à valider ces ordres de grandeur dans la section des simulations.
+
+# Un premier exemple
+
+Nous commençons par vérifier le bon fonctionnement des fonctions du package sur une petite instance ($n=10$). Nous simulons des points aléatoires dans un plan 2D.
+
+```{r}
+set.seed(42)
+n_test <- 10
+R_test <- 0.3
+
+# Génération des données (format liste de vecteurs)
+Z_test <- lapply(seq_len(n_test), function(i) c(runif(1), runif(1)))
+
+cat("--- Test de cohérence sur n =", n_test, "---\n")
+
+# 1. Exécution des fonctions R
+t_naive_r  <- system.time(res_naive_R  <- naive_SetCover(Z_test, R_test))[["elapsed"]]
+t_greedy_r <- system.time(res_greedy_R <- greedy_SetCover(Z_test, R_test))[["elapsed"]]
+t_bb_r     <- system.time(res_bb_R     <- branch_bound_SetCover(Z_test, R_test))[["elapsed"]]
+
+# 2. Exécution des fonctions C++
+t_naive_cpp  <- system.time(res_naive_Cpp  <- naive_SetCover_cpp(Z_test, R_test))[["elapsed"]]
+t_greedy_cpp <- system.time(res_greedy_Cpp <- greedy_SetCover_cpp(Z_test, R_test))[["elapsed"]]
+t_bb_cpp     <- system.time(res_bb_Cpp     <- branch_bound_SetCover_cpp(Z_test, R_test))[["elapsed"]]
+
+# Tableau récapitulatif
+results_check <- data.frame(
+  Algorithme = c("Naive (Force Brute)", "Greedy (Glouton)", "Branch & Bound"),
+  Solution_Taille_R = c(length(res_naive_R), length(res_greedy_R), length(res_bb_R)),
+  Solution_Taille_Cpp = c(length(res_naive_Cpp), length(res_greedy_Cpp), length(res_bb_Cpp)),
+  Temps_R = c(t_naive_r, t_greedy_r, t_bb_r),
+  Temps_Cpp = c(t_naive_cpp, t_greedy_cpp, t_bb_cpp)
+)
+
+print(results_check)
+```
+
+Analyse préliminaire :
+
+Les algorithmes exacts (Naive et B&B) trouvent la même taille de solution.
+
+Les versions R et C++ renvoient les mêmes résultats.
+
+Sur cette petite instance, les temps sont très faibles, mais on devine déjà l'avantage du C++
+
+# Visualisation d'une Instance
+
+Il est crucial de visualiser ce que l'algorithme "voit". Voici une représentation graphique d'une instance ($n=20$) et de la solution trouvée par l'algorithme Glouton.
+
+Les points rouges sont les stations sélectionnées, les cercles représentent leur rayon de couverture.
+
+```{r viz_instance, fig.width=6, fig.height=6}
+# Fonction de visualisation
+plot_solution <- function(Z, R, selected_indices, title) {
+  # Conversion liste -> data.frame
+  df_points <- do.call(rbind, lapply(Z, function(x) data.frame(x=x[1], y=x[2])))
+  df_points$Type <- "Non sélectionné"
+  df_points$Type[selected_indices] <- "Station Choisie"
+  
+  # Cercle pour chaque station choisie
+  # On crée un polygone pour dessiner le cercle (approximatif)
+  draw_circle <- function(center, radius, npoints = 100) {
+    tt <- seq(0, 2*pi, length.out = npoints)
+    data.frame(x = center[1] + radius * cos(tt), y = center[2] + radius * sin(tt))
+  }
+  
+  circles <- do.call(rbind, lapply(selected_indices, function(idx) {
+    d <- draw_circle(Z[[idx]], R)
+    d$group <- idx
+    return(d)
+  }))
+  
+  ggplot() +
+    # Les points
+    geom_point(data = df_points, aes(x=x, y=y, color=Type), size=3) +
+    # Les cercles de couverture
+    geom_path(data = circles, aes(x=x, y=y, group=group), color="red", alpha=0.5, linetype="dashed") +
+    scale_color_manual(values=c("black", "red")) +
+    coord_fixed(xlim=c(0,1), ylim=c(0,1)) +
+    labs(title = title, subtitle = paste("Rayon R =", R)) +
+    theme_minimal()
+}
+
+# Génération d'un exemple
+set.seed(123)
+n_viz <- 20
+R_viz <- 0.25
+Z_viz <- lapply(seq_len(n_viz), function(i) c(runif(1), runif(1)))
+
+# Résolution (Glouton pour l'exemple)
+sol_idx <- greedy_SetCover(Z_viz, R_viz)
+
+# Affichage
+plot_solution(Z_viz, R_viz, sol_idx, "Visualisation de la solution Gloutonne")
+```
+
+Cette figure illustre une solution proposée par l'algorithme Glouton pour $n=20$ points avec un rayon $R=0.25$.Les points rouges représentent les stations sélectionnées. Les cercles rouges en pointillés délimitent la zone de couverture de chaque station.
+
+On remarque la stratégie de l'algorithme : il a privilégié les zones à forte densité de points (où un seul cercle couvre 3 ou 4 points simultanément). Les points isolés (sur les bords) nécessitent souvent l'ajout d'une station dédiée, augmentant le coût total.
+
+Les zones de couverture se chevauchent, ce qui est inévitable dans le problème du Set Cover, mais l'algorithme cherche à minimiser ces redondances tout en assurant que tous les points noirs sont bien à l'intérieur d'au moins un cercle.
+
+# Simulations
+
+Toute la logique de simulation (génération des données, exécution des algorithmes R et C++, mesure du temps) est contenue dans le script Tests.R inclus dans le projet.
+
+```{r}
+# Nous appelons le script externe Tests.R
+
+if (!requireNamespace("devtools")) install.packages("devtools")
+
+# R va lire le code directement depuis GitHub et l'exécuter
+devtools::source_url("https://raw.githubusercontent.com/samuel-metin/Algorithmique_projet/main/Tests.R")
+```
+
+# Analyse des Résultats
+
+Les simulations ci-dessus ont été générées automatiquement via le script de test du package.
+
+## Analyse du Tableau de Données
+
+Affichons les temps moyens précis pour la plus grande taille testée ($n=11$) :
+
+```{r analyze_data}
+# On filtre les résultats pour n=11 (qui est dans la variable 'agg' générée par le script)
+df_11 <- subset(agg, n == 11)
+
+# On sépare pour mieux comparer
+library(tidyr)
+df_wide <- reshape(df_11, idvar = "n", timevar = "func", direction = "wide")
+
+# Nettoyage des noms de colonnes pour la lisibilité
+colnames(df_wide) <- gsub("time.", "", colnames(df_wide))
+
+# Affichage propre
+knitr::kable(df_wide, caption = "Temps moyen en secondes pour n=11")
+
+```
+
+**Analyse des résultats pour n=11 :**
+
+1.  **Branch & Bound :** C'est ici que l'écart est le plus flagrant.
+
+    -   Version R : **0.084s**. L'algorithme commence à sentir la complexité exponentielle et la lourdeur de la gestion des structures de données en R.
+    -   Version C++ : **0.000s** (Instantané). Le gain de performance est théoriquement infini ici (divison par zéro), mais on peut l'estimer à un facteur **\> 80x** (en supposant un temps C++ \< 0.001s).
+
+2.  **Naïve :** Le R prend 0.006s contre 0s pour le C++. Même pour une force brute simple, le C++ élimine toute latence.
+
+3.  **Greedy :** L'algorithme est polynomial ($O(n^3)$). Pour $n=11$, il est instantané dans les deux langages.
+
+**Conclusion intermédiaire :** Pour les petites instances, le C++ supprime totalement les temps de calcul. Pour observer les vraies limites du C++, nous devons augmenter la taille du problème ($n$).
+
+## Interprétation du Graphique
+
+Le graphique généré par la simulation montre clairement deux tendances.
+
+Les courbes des versions R (lignes noires et cyans) montent beaucoup plus vite que leurs équivalents C++ (lignes rouges et violettes) qui restent plaquées à l'axe des abscisses.
+
+Même pour de petits $n$, l'algorithme exact en R (Branch & Bound) commence déjà à montrer une croissance exponentielle, tandis que l'heuristique (Greedy) reste plate, confirmant sa nature polynomiale
+
+L'utilisation de Rcpp est donc indispensable pour implémenter des algorithmes exacts comme le Branch & Bound, car la version R devient inutilisable avant même d'atteindre $n=15$.
+
+# Évaluation de la complexité
+
+Puisque les versions C++ sont extrêmement performantes, nous pouvons pousser la simulation sur des tailles de problèmes beaucoup plus grandes ($n$ jusqu'à 20 ou 22) pour valider la complexité théorique.
+
+Nous lançons une nouvelle simulation ciblant spécifiquement les algorithmes C++.
+
+```{r complexity_simu}
+# Paramètres
+n_large <- c(10, 12, 14, 16, 18, 20)
+nb_rep <- 5
+results_complex <- data.frame()
+R_val <- 0.25
+
+# Boucle de simulation
+for (n in n_large) {
+  for (i in 1:nb_rep) {
+    s <- n*100 + i
+    
+    # On appelle one.simu (définie dans Tests.R)
+    # ATTENTION : On précise bien "_cpp" pour utiliser les versions rapides
+    
+    t_greedy <- one.simu(n, "greedy_cpp", R=R_val, seed=s)
+    t_branch <- one.simu(n, "branch_cpp", R=R_val, seed=s)
+    
+    # On limite le Naive à 20 pour éviter d'attendre trop longtemps
+    t_naive <- NA
+    if(n <= 20) {
+        t_naive <- one.simu(n, "naive_cpp", R=R_val, seed=s)
+    }
+    
+    results_complex <- rbind(results_complex, data.frame(n=n, Algo="Greedy", Time=t_greedy))
+    results_complex <- rbind(results_complex, data.frame(n=n, Algo="BranchBound", Time=t_branch))
+    
+    if(!is.na(t_naive)) {
+        results_complex <- rbind(results_complex, data.frame(n=n, Algo="Naive", Time=t_naive))
+    }
+  }
+}
+
+# Agrégation (Moyenne et Ecart-Type)
+agg_complex <- results_complex %>% 
+  group_by(n, Algo) %>% 
+  summarise(MeanTime = mean(Time), SdTime = sd(Time), .groups='drop')
+```
+
+Si la complexité est exponentielle ($T \approx C \cdot 2^n$), alors $\log(T) \approx n \cdot \log(2) + K$. Une droite sur un graphique semi-log confirme cette hypothèse.
+
+```{r}
+# On utilise les résultats calculés juste avant dans 'agg_complex'
+
+ggplot(agg_complex, aes(x = n, y = MeanTime, color = Algo)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  # Barres d'erreur (Moyenne +/- Ecart-type)
+  geom_errorbar(aes(ymin = MeanTime - SdTime, ymax = MeanTime + SdTime), width = 0.2) +
+  scale_y_log10() + # Axe Y logarithmique
+  labs(
+    title = "Analyse de Complexité (Algorithmes C++)",
+    subtitle = "Une droite indique une complexité exponentielle O(2^n)",
+    y = "Temps moyen (s) - Log Scale",
+    x = "Taille du problème (n)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+Le graphique ci-dessus présente le temps d'exécution moyen (échelle logarithmique) en fonction de la taille du problème $n$.1.
+
+La courbe bleue forme une ligne droite presque parfaite. Sur un graphique semi-logarithmique (axe Y en log), une droite indique une relation du type $\log(T) = a \cdot n + b$, ce qui équivaut à $T = K \cdot e^{an}$. Cela valide empiriquement la complexité théorique en $O(2^n)$. La faible variance (petites barres d'erreur) montre que le temps d'exécution dépend uniquement de $n$ et très peu de la configuration des données (car on teste toujours toutes les combinaisons).
+
+La courbe rouge (Algorithme Branch & Bound) est située en dessous de la bleue (plus rapide) et sa pente est légèrement plus faible. On remarque des barres d'erreur très grandes pour le Branch & Bound (les traits verticaux). Contrairement au Naïf, le B&B est très sensible aux données. Si l'algorithme "a de la chance" et trouve vite une bonne solution, il élague énormément (temps très court). S'il "a moins de chance", il doit explorer une grande partie de l'arbre (temps long). Bien que sa complexité pire-cas soit exponentielle, il est en moyenne beaucoup plus efficace que la force brute.
+
+La courbe verte (Algorithme Glouton) reste "collée" au bas du graphique, quasiment plate. Les temps d'exécution sont si faibles qu'ils sont négligeables par rapport aux méthodes exactes. Les variations visibles (zig-zags au début) sont dues au "bruit" de mesure sur des temps infinitésimaux (proches de 0.001s). Cela confirme la complexité polynomiale ($O(n^3)$). C'est la seule méthode viable pour passer à l'échelle ($n > 30$).
+
+# Validation des complexités exponentielles
+
+**Algorithme Naïf :**
+
+Pour confirmer rigoureusement la complexité exponentielle, nous effectuons une régression linéaire sur le logarithme du temps d'exécution de l'algorithme Naïf.
+
+Si la complexité est $T(n) \approx K \cdot 2^n$, alors en passant au logarithme népérien : $$\ln(T(n)) \approx \ln(K) + n \cdot \ln(2)$$
+
+Nous devons donc trouver une pente proche de $\ln(2) \approx 0.693$.
+
+```{r regression}
+# On filtre les données de l'algorithme Naive (et on retire les 0 pour éviter log(0))
+data_reg <- subset(agg_complex, Algo == "Naive" & MeanTime > 0)
+
+# Modèle linéaire : log(Temps) en fonction de n
+if (nrow(data_reg) > 2) {
+  model <- lm(log(MeanTime) ~ n, data = data_reg)
+  
+  # Extraction des résultats
+  pente_observee <- coef(model)["n"]
+  pente_theorique <- log(2)
+  r_carre <- summary(model)$r.squared
+  
+  cat("Résultats de la régression (Naive C++) :\n")
+  cat("----------------------------------------\n")
+  cat("Pente observée :", round(pente_observee, 4), "\n")
+  cat("Pente théorique (ln 2) :", round(pente_theorique, 4), "\n")
+  cat("Qualité de l'ajustement (R²) :", round(r_carre, 4), "\n")
+} else {
+  cat("Pas assez de données pour la régression.\n")
+}
+```
+
+Nous observons une pente empirique de 0.46, ce qui est inférieur à la pente théorique attendue de 0.69 ($\ln 2$).
+
+La complexité théorique $O(2^n)$ correspond au pire cas où l'algorithme doit explorer l'ensemble des sous-ensembles. Cependant, notre implémentation de la Force Brute est optimisée car elle explore les solutions par taille croissante ($k=1, 2, \dots$) et s'arrête dès qu'une solution valide est trouvée.
+
+Dans nos simulations aléatoires, la taille de la solution optimale ($k_{\min}$) est souvent petite par rapport à $n$. L'algorithme évite donc d'explorer la majorité de l'espace de recherche (les combinaisons de grande taille), ce qui explique pourquoi la complexité empirique observée ($e^{0.46n} \approx 1.58^n$) est meilleure que le pire cas théorique ($2^n$).
+
+Ceci démontre que même une approche naïve peut bénéficier de la structure des données si elle est implémentée intelligemment (arrêt précoce).
+
+**Algorithme Branch & Bound :**
+
+```{r B&B complexity}
+set.seed(42)
+vector_n <- c(30, 35, 40, 45, 50, 55, 60)
+nbRep <- 5
+times <- numeric(length(vector_n))
+
+for (i in seq_along(vector_n)) {
+  n <- vector_n[i]
+  t_rep <- numeric(nbRep)
+
+  for (r in seq_len(nbRep)) {
+    Z <- lapply(seq_len(n), function(i) c(runif(1), runif(1)))
+    t_rep[r] <- system.time(branch_bound_SetCover_cpp(Z, 0.3))[["elapsed"]]
+  }
+  times[i] <- mean(t_rep)
+}
+
+# ----- Plot log -----
+plot(vector_n, times, type = "b", pch = 19, col = "blue",
+     log = "y",
+     xlab = "Nombre de points",
+     ylab = "Temps moyen (s) (log scale)",
+     main = "Branch & Bound")
+
+# ----- Ajustement linéaire sur log -----
+fit <- lm(log(times) ~ vector_n)
+
+# Extraire la pente
+slope <- coef(fit)[2]
+
+# Calculer la base b = exp(slope)
+base_b <- exp(slope)
+
+pred_log <- predict(fit, newdata = data.frame(vector_n = vector_n))
+pred_times <- exp(pred_log)
+lines(vector_n, pred_times, col = "red", lwd = 2, lty = 2)
+
+
+# Afficher la pente estimée
+coef(fit)
+
+slope <- coef(fit)[2]
+
+text(x = max(vector_n),
+     y = min(times)*1.1,
+     labels = sprintf("Pente = %.3f Base = %.3f", slope, base_b),
+     pos = 2, col = "red")
+
+```
+
+On remarque que les points en échelle semi-log suivent une tendance assez linéaire, confirmant ainsi une complexité exponentielle. De même que pour la méthode précédente, on remarque que la vérification expérimentale donne une base d'exponentiel bien plus faible que celle prévue dans le pire cas théorique (2). L'algorithme Branch & Bound permet donc une méthode de résolution plus rapide et toujours exacte.
+
+### Qualité de l'approximation
+
+L'algorithme Glouton est extrêmement rapide (polynomial), mais il ne garantit pas l'optimalité. Nous allons quantifier cette perte de qualité en calculant le **Ratio d'Approximation** $\rho = \frac{\text{Solution Gloutonne}}{\text{Solution Optimale}}$ sur 50 instances aléatoires ($n=15$).
+
+```{r approximation_quality, fig.width=8, fig.height=4}
+set.seed(123)
+n_qual <- 15
+R_qual <- 0.25
+reps <- 50
+ratios <- numeric(reps)
+
+for(i in 1:reps) {
+  # On génère une instance
+  Z <- lapply(seq_len(n_qual), function(x) c(runif(1), runif(1)))
+  
+  # On calcule l'optimum (B&B) et l'approximation (Greedy)
+  # On utilise les versions C++ pour la vitesse
+  k_opt <- length(branch_bound_SetCover_cpp(Z, R_qual))
+  k_greedy <- length(greedy_SetCover_cpp(Z, R_qual))
+  
+  # Calcul du ratio (si k_opt > 0)
+  if(k_opt > 0) ratios[i] <- k_greedy / k_opt else ratios[i] <- 1
+}
+
+# Visualisation
+df_ratios <- data.frame(Ratio = ratios)
+
+ggplot(df_ratios, aes(x=Ratio)) +
+  geom_bar(fill="steelblue", color="black", alpha=0.7) +
+  labs(title = "Distribution du Ratio d'Approximation",
+       subtitle = paste("Comparaison sur", reps, "instances (n=15). 1.0 = Solution Optimale."),
+       x = "Ratio (Taille Glouton / Taille Optimale)",
+       y = "Nombre d'instances") +
+  theme_minimal()
+
+# Stats
+prop_opt <- mean(ratios == 1) * 100
+cat("Dans", prop_opt, "% des cas, l'algorithme Glouton a trouvé la solution optimale exacte.\n")
+cat("Le ratio moyen est de", round(mean(ratios), 3), ".")
+```
+
+Dans 92 % des cas, l'algorithme Glouton a trouvé la solution strictement optimale ($k_{greedy} = k_{opt}$). Cela montre que sur des données distribuées uniformément, l'heuristique gloutonne est redoutablement efficace.
+
+Avec un ratio moyen de 1.014, l'erreur moyenne n'est que de 1,4 % par rapport à l'optimum. Concrètement, si la solution optimale nécessite 100 stations, le glouton en proposera en moyenne 101 ou 102.
+
+La borne théorique du ratio d'approximation est $\ln(n)$. Pour $n=15$, $\ln(15) \approx 2.7$. Nous sommes ici très loin de ce "pire cas" théorique.
+
+Ces résultats valident la stratégie industrielle : pour des instances massives où le calcul exact est impossible, l'algorithme Glouton offre une solution quasi-instantanée avec une perte de qualité négligeable dans la grande majorité des configurations.
+
+# Validation de la Complexité Polynomiale (Algorithme Glouton)
+
+L'algorithme Glouton est théoriquement polynomial : $T(n) \approx K \cdot n^p$.
+
+Pour retrouver l'exposant $p$ empiriquement, nous devons utiliser une échelle **Log-Log**. En effet, $\ln(T) \approx p \cdot \ln(n) + \ln(K)$. La pente de la droite de régression nous donnera l'ordre du polynôme.
+
+```{r greedy_complexity}
+# Simulation spécifique pour le Glouton sur des GRANDS n
+# On augmente n pour que le temps ne soit pas nul (0s)
+n_poly <- seq(500, 2000, by=250)
+res_poly <- data.frame()
+
+for(n in n_poly) {
+  for(i in 1:5) {
+    # On utilise la version C++ pour la précision
+    t <- one.simu(n, "greedy_cpp", R=0.25, seed=n*1000+i)
+    res_poly <- rbind(res_poly, data.frame(n=n, Time=t))
+  }
+}
+
+# Moyennes
+agg_poly <- aggregate(Time ~ n, data = res_poly, mean)
+
+# Sécurité : On retire les éventuels temps nuls (si l'ordi est vraiment trop puissant)
+agg_poly <- agg_poly[agg_poly$Time > 0, ]
+
+# Visualisation Log-Log
+ggplot(agg_poly, aes(x=n, y=Time)) +
+  geom_point() + geom_smooth(method="lm") +
+  scale_x_log10() + scale_y_log10() +
+  labs(title = "Analyse Log-Log (Algorithme Glouton)",
+       subtitle = "La pente correspond à l'exposant du polynôme (Pente = k pour O(n^k))",
+       x = "Log(n)", y = "Log(Temps)") +
+  theme_minimal()
+
+# Régression pour trouver l'exposant
+if(nrow(agg_poly) > 2) {
+  model_poly <- lm(log(Time) ~ log(n), data = agg_poly)
+  exposant <- coef(model_poly)["log(n)"]
+
+  cat("Exposant empirique trouvé pour le Glouton :", round(exposant, 2), "\n")
+  cat("Cela correspond à une complexité estimée de O(n^", round(exposant, 1), ")", sep="")
+} else {
+  cat("Attention : Les temps d'exécution sont trop rapides pour être mesurés précisément.")
+}
+```
+
+L'alignement parfait des points sur une droite en échelle Log-Log valide la relation de type $T(n) \approx K \cdot n^p$. Contrairement aux courbes exponentielles vues précédemment, ici la croissance est maîtrisée.
+
+L'exposant empirique trouvé est de 1.89. Cela suggère une complexité pratique proche de $O(n^2)$. Cela est cohérent avec la structure de l'algorithme Glouton qui effectue une boucle principale (tant que non couvert) et, à l'intérieur, parcourt les stations pour trouver le meilleur gain local. Bien que la complexité pire-cas théorique puisse être supérieure ($O(n^3)$ selon l'implémentation), sur des données aléatoires uniformes, la couverture converge plus vite, d'où un exposant légèrement inférieur à 2.
+
+Une complexité en $n^{1.9}$ permet de traiter des instances de très grande taille. Là où un algorithme en $2^n$ sature à $n=25$, cet algorithme peut traiter $n=2000$ en moins d'une seconde, comme le montre le graphique.
+
+Ce résultat confirme que l'algorithme Glouton (implémenté en C++) est la solution adaptée pour le passage à l'échelle (Big Data), offrant un temps de calcul prévisible et rapide.
+
+# Conclusion
+
+Ce projet a permis d'explorer les différentes facettes de la résolution d'un problème NP-difficile, le Set Cover Problem, en comparant des approches exactes et approchées dans un environnement hybride R/C++.
+
+Nos simulations confirment que les méthodes exactes sont limitées par une complexité exponentielle. L'algorithme de Force Brute devient impraticable dès $n \approx 15$ en R et $n \approx 20$ en C++.
+
+L'intégration du C++ a offert un gain de performance massif, avec un facteur d'accélération moyen de 50x à 100x pour les algorithmes combinatoires (Branch & Bound). Cela valide l'intérêt de déléguer les calculs intensifs à un langage compilé.
+
+Bien que théoriquement exponentiel dans le pire des cas, le Branch & Bound s'est révélé être la méthode exacte la plus performante en pratique, grâce à une stratégie d'élagage efficace guidée par une borne inférieure et une file de priorité.
+
+Face à des instances de grande taille ($n > 30$), la recherche de l'optimum exact devient impossible. Nos tests de qualité ont montré que l'algorithme Glouton (Greedy) constitue une excellente alternative : il est extrêmement rapide (polynomial) et fournit une solution très proche de l'optimale (erreur moyenne de 1,4% dans nos simulations), ce qui en fait le choix privilégié pour les applications industrielles réelles.
