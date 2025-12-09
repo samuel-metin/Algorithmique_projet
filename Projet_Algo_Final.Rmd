@@ -314,7 +314,7 @@ Si la complexité est $T(n) \approx K \cdot 2^n$, alors en passant au logarithme
 Nous devons donc trouver une pente proche de $\ln(2) \approx 0.693$.
 
 ```{r regression}
-# On filtre les données de l'algorithme Naive (et on retire les 0 pour éviter log(0))
+# On filtre les données de l'algorithme Naive
 data_reg <- subset(agg_complex, Algo == "Naive" & MeanTime > 0)
 
 # Modèle linéaire : log(Temps) en fonction de n
@@ -326,11 +326,42 @@ if (nrow(data_reg) > 2) {
   pente_theorique <- log(2)
   r_carre <- summary(model)$r.squared
   
+  # Calcul de la base expérimentale (pour le graphique)
+  base_b <- exp(pente_observee)
+  
+  # Affichage des résultats texte
   cat("Résultats de la régression (Naive C++) :\n")
   cat("----------------------------------------\n")
   cat("Pente observée :", round(pente_observee, 4), "\n")
   cat("Pente théorique (ln 2) :", round(pente_theorique, 4), "\n")
   cat("Qualité de l'ajustement (R²) :", round(r_carre, 4), "\n")
+  
+  # --- Ajout du Graphique avec Ajustement ---
+  
+  # On ajoute les prédictions du modèle au dataframe pour tracer la droite
+  data_reg$Fitted <- exp(predict(model))
+  
+  # Création du label pour le graphique
+  label_text <- sprintf("Pente = %.3f\nBase = %.3f", pente_observee, base_b)
+  
+  ggplot(data_reg, aes(x = n)) +
+    # Points observés
+    geom_point(aes(y = MeanTime), color = "blue", size = 3) +
+    # Droite de régression (Fitted)
+    geom_line(aes(y = Fitted), color = "red", linetype = "dashed", size = 1) +
+    # Échelle Logarithmique
+    scale_y_log10() +
+    # Annotation (Pente et Base)
+    annotate("text", x = min(data_reg$n), y = max(data_reg$MeanTime), 
+             label = label_text, hjust = 0, vjust = 1, color = "red", fontface = "bold") +
+    labs(
+      title = "Ajustement Linéaire sur Échelle Log (Naive C++)",
+      subtitle = "Confirmation visuelle de la complexité exponentielle",
+      y = "Temps moyen (s) - Log Scale",
+      x = "Taille du problème (n)"
+    ) +
+    theme_minimal()
+    
 } else {
   cat("Pas assez de données pour la régression.\n")
 }
@@ -343,6 +374,7 @@ La complexité théorique $O(2^n)$ correspond au pire cas où l'algorithme doit 
 Dans nos simulations aléatoires, la taille de la solution optimale ($k_{\min}$) est souvent petite par rapport à $n$. L'algorithme évite donc d'explorer la majorité de l'espace de recherche (les combinaisons de grande taille), ce qui explique pourquoi la complexité empirique observée ($e^{0.46n} \approx 1.58^n$) est meilleure que le pire cas théorique ($2^n$).
 
 Ceci démontre que même une approche naïve peut bénéficier de la structure des données si elle est implémentée intelligemment (arrêt précoce).
+
 
 **Algorithme Branch & Bound :**
 
@@ -398,54 +430,7 @@ text(x = max(vector_n),
 
 On remarque que les points en échelle semi-log suivent une tendance assez linéaire, confirmant ainsi une complexité exponentielle. De même que pour la méthode précédente, on remarque que la vérification expérimentale donne une base d'exponentiel bien plus faible que celle prévue dans le pire cas théorique (2). L'algorithme Branch & Bound permet donc une méthode de résolution plus rapide et toujours exacte.
 
-### Qualité de l'approximation
 
-L'algorithme Glouton est extrêmement rapide (polynomial), mais il ne garantit pas l'optimalité. Nous allons quantifier cette perte de qualité en calculant le **Ratio d'Approximation** $\rho = \frac{\text{Solution Gloutonne}}{\text{Solution Optimale}}$ sur 50 instances aléatoires ($n=15$).
-
-```{r approximation_quality, fig.width=8, fig.height=4}
-set.seed(123)
-n_qual <- 15
-R_qual <- 0.25
-reps <- 50
-ratios <- numeric(reps)
-
-for(i in 1:reps) {
-  # On génère une instance
-  Z <- lapply(seq_len(n_qual), function(x) c(runif(1), runif(1)))
-  
-  # On calcule l'optimum (B&B) et l'approximation (Greedy)
-  # On utilise les versions C++ pour la vitesse
-  k_opt <- length(branch_bound_SetCover_cpp(Z, R_qual))
-  k_greedy <- length(greedy_SetCover_cpp(Z, R_qual))
-  
-  # Calcul du ratio (si k_opt > 0)
-  if(k_opt > 0) ratios[i] <- k_greedy / k_opt else ratios[i] <- 1
-}
-
-# Visualisation
-df_ratios <- data.frame(Ratio = ratios)
-
-ggplot(df_ratios, aes(x=Ratio)) +
-  geom_bar(fill="steelblue", color="black", alpha=0.7) +
-  labs(title = "Distribution du Ratio d'Approximation",
-       subtitle = paste("Comparaison sur", reps, "instances (n=15). 1.0 = Solution Optimale."),
-       x = "Ratio (Taille Glouton / Taille Optimale)",
-       y = "Nombre d'instances") +
-  theme_minimal()
-
-# Stats
-prop_opt <- mean(ratios == 1) * 100
-cat("Dans", prop_opt, "% des cas, l'algorithme Glouton a trouvé la solution optimale exacte.\n")
-cat("Le ratio moyen est de", round(mean(ratios), 3), ".")
-```
-
-Dans 92 % des cas, l'algorithme Glouton a trouvé la solution strictement optimale ($k_{greedy} = k_{opt}$). Cela montre que sur des données distribuées uniformément, l'heuristique gloutonne est redoutablement efficace.
-
-Avec un ratio moyen de 1.014, l'erreur moyenne n'est que de 1,4 % par rapport à l'optimum. Concrètement, si la solution optimale nécessite 100 stations, le glouton en proposera en moyenne 101 ou 102.
-
-La borne théorique du ratio d'approximation est $\ln(n)$. Pour $n=15$, $\ln(15) \approx 2.7$. Nous sommes ici très loin de ce "pire cas" théorique.
-
-Ces résultats valident la stratégie industrielle : pour des instances massives où le calcul exact est impossible, l'algorithme Glouton offre une solution quasi-instantanée avec une perte de qualité négligeable dans la grande majorité des configurations.
 
 # Validation de la Complexité Polynomiale (Algorithme Glouton)
 
@@ -501,6 +486,55 @@ L'exposant empirique trouvé est de 1.89. Cela suggère une complexité pratique
 Une complexité en $n^{1.9}$ permet de traiter des instances de très grande taille. Là où un algorithme en $2^n$ sature à $n=25$, cet algorithme peut traiter $n=2000$ en moins d'une seconde, comme le montre le graphique.
 
 Ce résultat confirme que l'algorithme Glouton (implémenté en C++) est la solution adaptée pour le passage à l'échelle (Big Data), offrant un temps de calcul prévisible et rapide.
+
+# Qualité de l'approximation de la solution de l'algorithme Glouton
+
+L'algorithme Glouton est extrêmement rapide (polynomial), mais il ne garantit pas l'optimalité. Nous allons quantifier cette perte de qualité en calculant le **Ratio d'Approximation** $\rho = \frac{\text{Solution Gloutonne}}{\text{Solution Optimale}}$ sur 50 instances aléatoires ($n=15$).
+
+```{r approximation_quality, fig.width=8, fig.height=4}
+set.seed(123)
+n_qual <- 15
+R_qual <- 0.25
+reps <- 50
+ratios <- numeric(reps)
+
+for(i in 1:reps) {
+  # On génère une instance
+  Z <- lapply(seq_len(n_qual), function(x) c(runif(1), runif(1)))
+  
+  # On calcule l'optimum (B&B) et l'approximation (Greedy)
+  # On utilise les versions C++ pour la vitesse
+  k_opt <- length(branch_bound_SetCover_cpp(Z, R_qual))
+  k_greedy <- length(greedy_SetCover_cpp(Z, R_qual))
+  
+  # Calcul du ratio (si k_opt > 0)
+  if(k_opt > 0) ratios[i] <- k_greedy / k_opt else ratios[i] <- 1
+}
+
+# Visualisation
+df_ratios <- data.frame(Ratio = ratios)
+
+ggplot(df_ratios, aes(x=Ratio)) +
+  geom_bar(fill="steelblue", color="black", alpha=0.7) +
+  labs(title = "Distribution du Ratio d'Approximation",
+       subtitle = paste("Comparaison sur", reps, "instances (n=15). 1.0 = Solution Optimale."),
+       x = "Ratio (Taille Glouton / Taille Optimale)",
+       y = "Nombre d'instances") +
+  theme_minimal()
+
+# Stats
+prop_opt <- mean(ratios == 1) * 100
+cat("Dans", prop_opt, "% des cas, l'algorithme Glouton a trouvé la solution optimale exacte.\n")
+cat("Le ratio moyen est de", round(mean(ratios), 3), ".")
+```
+
+Dans 92 % des cas, l'algorithme Glouton a trouvé la solution strictement optimale ($k_{greedy} = k_{opt}$). Cela montre que sur des données distribuées uniformément, l'heuristique gloutonne est redoutablement efficace.
+
+Avec un ratio moyen de 1.014, l'erreur moyenne n'est que de 1,4 % par rapport à l'optimum. Concrètement, si la solution optimale nécessite 100 stations, le glouton en proposera en moyenne 101 ou 102.
+
+La borne théorique du ratio d'approximation est $\ln(n)$. Pour $n=15$, $\ln(15) \approx 2.7$. Nous sommes ici très loin de ce "pire cas" théorique.
+
+Ces résultats valident la stratégie industrielle : pour des instances massives où le calcul exact est impossible, l'algorithme Glouton offre une solution quasi-instantanée avec une perte de qualité négligeable dans la grande majorité des configurations.
 
 # Conclusion
 
