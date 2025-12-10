@@ -430,6 +430,19 @@ text(x = max(vector_n),
 
 On remarque que les points en échelle semi-log suivent une tendance assez linéaire, confirmant ainsi une complexité exponentielle. De même que pour la méthode précédente, on remarque que la vérification expérimentale donne une base d'exponentiel bien plus faible que celle prévue dans le pire cas théorique (2). L'algorithme Branch & Bound permet donc une méthode de résolution plus rapide et toujours exacte.
 
+**Branch & Bound Ré-indéxé** 
+
+Une variante naturelle du Branch & Bound consiste à ré-indexer les sommets avant l’exploration de l’arbre de recherche. Le principe est le suivant :
+
+Exécuter d’abord l’algorithme glouton (Greedy), de complexité $O(n^3)$, afin d’obtenir une première solution approximative, jouant le rôle de borne supérieure initiale.
+Réordonner les sommets de manière à placer en premier ceux sélectionnés par cette solution gloutonne.
+Exécuter ensuite le Branch & Bound classique sur cette instance ré-indexée.
+L’intérêt de cette approche est que, si l’ordre proposé par Greedy est pertinent, l’algorithme exact dispose rapidement d’une bonne solution, ce qui permet d’élaguer plus tôt une grande partie de l’arbre de recherche. On s’attend donc à réduire le temps d’exécution ou, au minimum, à diminuer la base exponentielle effective.
+La suite présente une comparaison directe entre le Branch & Bound classique et cette version ré-indexée.
+
+
+
+
 
 
 # Validation de la Complexité Polynomiale (Algorithme Glouton)
