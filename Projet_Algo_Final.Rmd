@@ -375,7 +375,6 @@ Dans nos simulations aléatoires, la taille de la solution optimale ($k_{\min}$)
 
 Ceci démontre que même une approche naïve peut bénéficier de la structure des données si elle est implémentée intelligemment (arrêt précoce).
 
-
 **Algorithme Branch & Bound :**
 
 ```{r B&B complexity}
@@ -430,15 +429,12 @@ text(x = max(vector_n),
 
 On remarque que les points en échelle semi-log suivent une tendance assez linéaire, confirmant ainsi une complexité exponentielle. De même que pour la méthode précédente, on remarque que la vérification expérimentale donne une base d'exponentiel bien plus faible que celle prévue dans le pire cas théorique (2). L'algorithme Branch & Bound permet donc une méthode de résolution plus rapide et toujours exacte.
 
-**Branch & Bound Ré-indéxé** 
+**Branch & Bound Ré-indéxé**
 
 Une variante naturelle du Branch & Bound consiste à ré-indexer les sommets avant l’exploration de l’arbre de recherche. Le principe est le suivant :
 
-Exécuter d’abord l’algorithme glouton (Greedy), de complexité $O(n^3)$, afin d’obtenir une première solution approximative, jouant le rôle de borne supérieure initiale.
-Réordonner les sommets de manière à placer en premier ceux sélectionnés par cette solution gloutonne.
-Exécuter ensuite le Branch & Bound classique sur cette instance ré-indexée.
-L’intérêt de cette approche est que, si l’ordre proposé par Greedy est pertinent, l’algorithme exact dispose rapidement d’une bonne solution, ce qui permet d’élaguer plus tôt une grande partie de l’arbre de recherche. On s’attend donc à réduire le temps d’exécution ou, au minimum, à diminuer la base exponentielle effective.
-La suite présente une comparaison directe entre le Branch & Bound classique et cette version ré-indexée.
+Exécuter d’abord l’algorithme glouton (Greedy), de complexité $O(n^3)$, afin d’obtenir une première solution approximative, jouant le rôle de borne supérieure initiale. Réordonner les sommets de manière à placer en premier ceux sélectionnés par cette solution gloutonne. Exécuter ensuite le Branch & Bound classique sur cette instance ré-indexée. L’intérêt de cette approche est que, si l’ordre proposé par Greedy est pertinent, l’algorithme exact dispose rapidement d’une bonne solution, ce qui permet d’élaguer plus tôt une grande partie de l’arbre de recherche. On s’attend donc à réduire le temps d’exécution ou, au minimum, à diminuer la base exponentielle effective. La suite présente une comparaison directe entre le Branch & Bound classique et cette version ré-indexée.
+
 ```{r}
 bb_reindexed <- function(Z, R) {
   n <- length(Z)
@@ -481,14 +477,10 @@ text(max(vector_n), min(times_rei)*1.2,
      sprintf("Pente = %.3f\nBase = %.3f", slope_rei, base_rei),
      pos=2, col="red")
 ```
+
 Les résultats obtenus montrent que la ré-indexation améliore systématiquement les performances du Branch & Bound. Les temps d’exécution sont légèrement plus faibles pour toutes les valeurs de $n$, et l’écart devient visible lorsque la taille du problème augmente. Sur l’échelle logarithmique, la courbe ré-indexée reste globalement en dessous de la courbe classique, ce qui confirme que l’algorithme explore moins profondément l’arbre de décision.
 
-La pente estimée à partir du modèle linéaire sur $\log(T)$ est également plus faible pour la version ré-indexée. Cela indique une réduction de la base exponentielle effective, même si la complexité globale reste exponentielle. Autrement dit, cette stratégie ne change pas l’ordre de grandeur asymptotique, mais améliore concrètement la rapidité de l’algorithme exact sur les instances aléatoires.
-En pratique, la ré-indexation permet donc d’obtenir une version du Branch & Bound plus efficace, tout en conservant exactement la même solution optimale.
-
-
-
-
+La pente estimée à partir du modèle linéaire sur $\log(T)$ est également plus faible pour la version ré-indexée. Cela indique une réduction de la base exponentielle effective, même si la complexité globale reste exponentielle. Autrement dit, cette stratégie ne change pas l’ordre de grandeur asymptotique, mais améliore concrètement la rapidité de l’algorithme exact sur les instances aléatoires. En pratique, la ré-indexation permet donc d’obtenir une version du Branch & Bound plus efficace, tout en conservant exactement la même solution optimale.
 
 # Validation de la Complexité Polynomiale (Algorithme Glouton)
 
@@ -590,14 +582,13 @@ Dans 92 % des cas, l'algorithme Glouton a trouvé la solution strictement optima
 
 Avec un ratio moyen de 1.014, l'erreur moyenne n'est que de 1,4 % par rapport à l'optimum. Concrètement, si la solution optimale nécessite 100 stations, le glouton en proposera en moyenne 101 ou 102.
 
-La borne théorique du ratio d'approximation est $\ln(n)$. Pour $n=15$, $\ln(15) \approx 2.7$. Nous sommes ici très loin de ce "pire cas" théorique.
+La borne théorique du ratio d'approximation est $\ln(n)$. En effet, à chaque étape i, le glouton choisit un point couvrant au moins une fraction $\frac{1}{k-i+1}$ des éléments restants, où k est le nombre de points optimaux. En sommant ces fractions sur toutes les étapes, on obtient une somme harmonique $\sum{\frac{1}{k-i+1}}$, équivalente à $ln(k) \le ln(n)$ en l'infini. Pour $n=15$, $\ln(15) \approx 2.7$. Nous sommes ici très loin de ce "pire cas" théorique.
 
 Ces résultats valident la stratégie industrielle : pour des instances massives où le calcul exact est impossible, l'algorithme Glouton offre une solution quasi-instantanée avec une perte de qualité négligeable dans la grande majorité des configurations.
 
 # Validation de la borne théorique $\ln(n)$ sur petites instances
 
-La théorie prédit que le ratio d'approximation est majoré par $\ln(n)$.
-Grâce à la performance de notre Branch & Bound C++, nous pouvons calculer l'optimum exact pour $n$ allant jusqu'à 25 et vérifier si le ratio observé reste bien sous cette courbe théorique.
+La théorie prédit que le ratio d'approximation est majoré par $\ln(n)$. Grâce à la performance de notre Branch & Bound C++, nous pouvons calculer l'optimum exact pour $n$ allant jusqu'à 25 et vérifier si le ratio observé reste bien sous cette courbe théorique.
 
 ```{r check_log_bound, fig.width=8, fig.height=5}
 # Paramètres
@@ -653,12 +644,12 @@ ggplot(agg_bound, aes(x = n)) +
   scale_y_continuous(limits = c(0.8, 3.5)) # Ajuster selon ln(25) approx 3.2
 
 ```
+
 Ce graphique permet de vérifier la validité de la borne théorique de l'approximation Gloutonne, qui stipule que le ratio $\rho = \frac{k_{greedy}}{k_{opt}}$ ne dépasse jamais $\ln(n)$.
 
 Les croix vertes ("Pire Ratio Observé") représentent les pires performances de l'algorithme Glouton rencontrées lors de nos simulations. Nous constatons que tous ces points se situent systématiquement en dessous de la courbe rouge en pointillés ($\ln(n)$).
 
 Cela valide empiriquement que l'algorithme respecte bien sa garantie théorique. Aucun contre-exemple n'a été trouvé.
-
 
 La courbe bleue ("Ratio Moyen Observé") est très proche de 1 (l'axe horizontal), oscillant légèrement autour de 1.01 - 1.05. Bien que la théorie autorise une erreur allant jusqu'à 3.2 (pour $n=25$), en moyenne, sur des données aléatoires uniformes, l'algorithme est bien meilleur que ce pire cas. Il trouve une solution quasi-optimale la plupart du temps.
 
@@ -688,6 +679,7 @@ ggplot(agg_bound, aes(x = n, y = Mean_Ratio)) +
 a <- coef(model_ratio)["log(n)"]
 cat("Coefficient devant ln(n) :", round(a, 4), "\n")
 ```
+
 Pour vérifier si la qualité de l'approximation se dégrade avec la taille du problème selon la borne théorique $\rho(n) \le \ln(n)$, nous avons effectué une régression linéaire du Ratio Moyen en fonction de $\ln(n)$.
 
 Le modèle testé est : $\text{Ratio} \approx a \cdot \ln(n) + b$. Le coefficient directeur obtenu est $a = 0.0473$. La p-value est très faible ($< 10^{-5}$), ce qui confirme que la corrélation logarithmique est statistiquement significative ($R^2 \approx 0.66$).
