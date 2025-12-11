@@ -594,6 +594,108 @@ La borne théorique du ratio d'approximation est $\ln(n)$. Pour $n=15$, $\ln(15)
 
 Ces résultats valident la stratégie industrielle : pour des instances massives où le calcul exact est impossible, l'algorithme Glouton offre une solution quasi-instantanée avec une perte de qualité négligeable dans la grande majorité des configurations.
 
+# Validation de la borne théorique $\ln(n)$ sur petites instances
+
+La théorie prédit que le ratio d'approximation est majoré par $\ln(n)$.
+Grâce à la performance de notre Branch & Bound C++, nous pouvons calculer l'optimum exact pour $n$ allant jusqu'à 25 et vérifier si le ratio observé reste bien sous cette courbe théorique.
+
+```{r check_log_bound, fig.width=8, fig.height=5}
+# Paramètres
+n_values <- seq(5, 25, by=1) # On teste de 5 à 25
+nb_rep <- 20                 # 20 instances par taille
+results_bound <- data.frame()
+
+set.seed(42)
+
+for (n in n_values) {
+  for (i in 1:nb_rep) {
+    # Génération d'une instance
+    Z <- lapply(seq_len(n), function(x) c(runif(1), runif(1)))
+    
+    # Calcul des solutions (C++)
+    k_opt <- length(branch_bound_SetCover_cpp(Z, 0.25))
+    k_greedy <- length(greedy_SetCover_cpp(Z, 0.25))
+    
+    # Calcul du ratio
+    ratio <- if (k_opt > 0) k_greedy / k_opt else 1
+    
+    results_bound <- rbind(results_bound, data.frame(n = n, Ratio = ratio))
+  }
+}
+
+# Calcul des moyennes et max par n
+agg_bound <- results_bound %>%
+  group_by(n) %>%
+  summarise(
+    Mean_Ratio = mean(Ratio),
+    Max_Ratio = max(Ratio) # Le pire cas rencontré
+  )
+
+# Visualisation
+ggplot(agg_bound, aes(x = n)) +
+  geom_line(aes(y = Mean_Ratio, color = "Ratio Moyen Observé"), size = 1) +
+  geom_point(aes(y = Mean_Ratio, color = "Ratio Moyen Observé")) +
+  
+  # Points pour le PIRE ratio observé (pour voir si on s'approche de la borne)
+  geom_point(aes(y = Max_Ratio, color = "Pire Ratio Observé"), shape=4, size=3) +
+  
+  # Courbe théorique ln(n)
+  stat_function(fun = function(x) log(x), aes(color = "Borne Théorique ln(n)"), linetype = "dashed", size = 1) +
+  
+  labs(
+    title = "Validation de la borne d'approximation",
+    subtitle = "Comparaison du ratio observé avec la borne théorique ln(n)",
+    y = "Ratio d'approximation",
+    x = "Taille du problème (n)",
+    color = "Légende"
+  ) +
+  theme_minimal() +
+  scale_y_continuous(limits = c(0.8, 3.5)) # Ajuster selon ln(25) approx 3.2
+
+```
+Ce graphique permet de vérifier la validité de la borne théorique de l'approximation Gloutonne, qui stipule que le ratio $\rho = \frac{k_{greedy}}{k_{opt}}$ ne dépasse jamais $\ln(n)$.
+
+Les croix vertes ("Pire Ratio Observé") représentent les pires performances de l'algorithme Glouton rencontrées lors de nos simulations. Nous constatons que tous ces points se situent systématiquement en dessous de la courbe rouge en pointillés ($\ln(n)$).
+
+Cela valide empiriquement que l'algorithme respecte bien sa garantie théorique. Aucun contre-exemple n'a été trouvé.
+
+
+La courbe bleue ("Ratio Moyen Observé") est très proche de 1 (l'axe horizontal), oscillant légèrement autour de 1.01 - 1.05. Bien que la théorie autorise une erreur allant jusqu'à 3.2 (pour $n=25$), en moyenne, sur des données aléatoires uniformes, l'algorithme est bien meilleur que ce pire cas. Il trouve une solution quasi-optimale la plupart du temps.
+
+L'algorithme Glouton est non seulement garanti par une borne théorique solide ($\ln(n)$), mais il se révèle excellent en pratique sur des données standards.
+
+```{r validation_ratio_log}
+# On reprend les données agg_bound calculées précédemment (Moyennes des ratios)
+
+# Modèle linéaire : Ratio = a * ln(n) + b
+model_ratio <- lm(Mean_Ratio ~ log(n), data = agg_bound)
+summary(model_ratio)
+
+# Visualisation avec la droite de régression
+ggplot(agg_bound, aes(x = n, y = Mean_Ratio)) +
+  geom_point(color = "blue") +
+  # On ajoute la courbe du modèle (qui est une log-courbe en échelle linéaire)
+  stat_smooth(method = "lm", formula = y ~ log(x), color = "red", se = FALSE) +
+  labs(
+    title = "Tendance du Ratio d'Approximation",
+    subtitle = "Régression : Ratio ~ a * ln(n) + b",
+    x = "Taille n",
+    y = "Ratio Moyen"
+  ) +
+  theme_minimal()
+
+# Analyse des coefficients
+a <- coef(model_ratio)["log(n)"]
+cat("Coefficient devant ln(n) :", round(a, 4), "\n")
+```
+Pour vérifier si la qualité de l'approximation se dégrade avec la taille du problème selon la borne théorique $\rho(n) \le \ln(n)$, nous avons effectué une régression linéaire du Ratio Moyen en fonction de $\ln(n)$.
+
+Le modèle testé est : $\text{Ratio} \approx a \cdot \ln(n) + b$. Le coefficient directeur obtenu est $a = 0.0473$. La p-value est très faible ($< 10^{-5}$), ce qui confirme que la corrélation logarithmique est statistiquement significative ($R^2 \approx 0.66$).
+
+Ce coefficient de 0.047 est extrêmement faible. Dans le pire cas, le ratio pourrait augmenter avec une pente de 1 (suivant $\ln(n)$). Sur nos données, le ratio augmente bien de manière logarithmique, mais 20 fois plus lentement que la borne théorique ne le permettrait.
+
+Cela confirme que l'algorithme Glouton est extrêmement robuste. Même pour des $n$ très grands, la dégradation de la qualité de la solution sera quasi-imperceptible, restant très proche de l'optimum (ratio $\approx 1$).
+
 # Conclusion
 
 Ce projet a permis d'explorer les différentes facettes de la résolution d'un problème NP-difficile, le Set Cover Problem, en comparant des approches exactes et approchées dans un environnement hybride R/C++.
